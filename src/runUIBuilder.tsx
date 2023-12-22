@@ -1,7 +1,6 @@
 import {bitable, IOpenCellValue, UIBuilder} from "@lark-base-open/js-sdk";
 import Config from "./Config";
 
-const table = await bitable.base.getActiveTable();
 
 export default async function main(uiBuilder: UIBuilder) {
     // 先获取表格
