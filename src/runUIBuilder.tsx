@@ -25,7 +25,7 @@ export default async function main(uiBuilder: UIBuilder) {
     }
 
 
-    uiBuilder.text("一键更新统计表");
+    uiBuilder.text("一键更新统计表v1.0");
     uiBuilder.form(form => ({
         formItems: [],
         buttons: ['更新统计表'],
