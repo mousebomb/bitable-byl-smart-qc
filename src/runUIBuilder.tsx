@@ -1,5 +1,6 @@
 import {bitable, DateFormatter, IOpenCellValue, UIBuilder} from "@lark-base-open/js-sdk";
 import Config from "./Config";
+import StatsUniqueGroup from "./StatsUniqueGroup";
 
 
 export default async function main(uiBuilder: UIBuilder) {
@@ -38,9 +39,8 @@ export default async function main(uiBuilder: UIBuilder) {
         //获取表格数据
         const recordRecordIds = await recordTable.getRecordIdList();
         // 先分析，找出各种组合的 不重复的  cheJian , orderNo 和 date组合联合唯一，且isDone为false
-        let statsOrderNos = new Set<string>();
-        let statsDates = new Set<IOpenCellValue>();
-        let statsCheJians = new Set<string>();
+        let statsUniqueGroups = new Map<string,StatsUniqueGroup>();
+
 
         // 遍历所有记录
         for (let recordId of recordRecordIds) {
@@ -63,18 +63,17 @@ export default async function main(uiBuilder: UIBuilder) {
                 console.warn("default/flushData", "orderNoVal is null");
                 continue;
             }
-            //去重
-            if (!statsOrderNos.has(orderNoVal))
-                statsOrderNos.add(orderNoVal);
-            if (!statsDates.has(dateVal))
-                statsDates.add(dateVal);
-            if (!statsCheJians.has(cheJianVal))
-                statsCheJians.add(cheJianVal);
+            //记录已存在的各种组合
+            var group = new StatsUniqueGroup(orderNoVal,dateVal,cheJianVal);
+
+            if(!statsUniqueGroups.has(group.key))
+                statsUniqueGroups.set(group.key,group);
+
             //标记已插入
             await recordTable.setCellValue( recordDoneField.id,recordId,true);
 
         }
-        workLog += "已分析出" + statsCheJians.size+"个车间，" +statsOrderNos.size+"个订单号，"+statsDates.size+"个日期\n";
+        workLog += "已分析出新纪录的" + statsUniqueGroups.size+"个组合\n";
         // console.log("default/分析完毕",statsOrderNos,statsDates);
 
         //便利所有已统计的表行
@@ -100,37 +99,25 @@ export default async function main(uiBuilder: UIBuilder) {
 
         // 写入数据，
         let done = 0;
-        let max = statsOrderNos.size * statsDates.size;
-        for (let orderNo of statsOrderNos)
+        let max = statsUniqueGroups.size;
+        for (let kvp of statsUniqueGroups)
         {
-            for(let cheJian of statsCheJians)
+            let eachStatsUniqueGroup = kvp[1];
+            done++;
+            // 需要检测统计表里没有这个组合
+            if(statsAlreadyGroup.has(eachStatsUniqueGroup.cheJian+"_"+eachStatsUniqueGroup.orderNo +"_"+ eachStatsUniqueGroup.dateVal))
             {
-                for (let date of statsDates)
-                {
-                    done++;
-                    // 需要检测统计表里没有这个组合
-                    if(statsAlreadyGroup.has(cheJian+"_"+orderNo +"_"+ date))
-                    {
-                        var str = '跳过'+cheJian +"_"+orderNo+"_"+date+","+ done + "/" + max;
-                        workLog += str + "\n";
-                        uiBuilder.showLoading(str + '，请不要重复点击，以免造成数据错误...');
-                        continue;
-                    }
-
-                    var str = '插入'+cheJian +"_"+orderNo+"_"+date+","+ done + "/" + max ;
-                    workLog += str + "\n";
-                    uiBuilder.showLoading(str+ '，请不要重复点击，以免造成数据错误...');
-                    // 写入统计表
-                    const statsRecordId = await statsTable.addRecord([await statsCheJianField.createCell(cheJian), await statsOrderNoField.createCell(orderNo), await statsDateField.createCell(date)]);
-                    // const statsRecordId = await statsTable.addRecord({
-                    //     fields: {
-                    //         [statsCheJianField.id]: cheJian,
-                    //         [statsOrderNoField.id]: orderNo,
-                    //         [statsDateField.id]: date,
-                    //     }
-                    // });
-                }
+                var str = '跳过'+eachStatsUniqueGroup.cheJian +"_"+eachStatsUniqueGroup.orderNo+"_"+eachStatsUniqueGroup.dateVal+","+ done + "/" + max;
+                workLog += str + "\n";
+                uiBuilder.showLoading(str + '，请不要重复点击，以免造成数据错误...');
+                continue;
             }
+
+            var str = '插入'+eachStatsUniqueGroup.cheJian +"_"+eachStatsUniqueGroup.orderNo+"_"+eachStatsUniqueGroup.dateVal+","+ done + "/" + max ;
+            workLog += str + "\n";
+            uiBuilder.showLoading(str+ '，请不要重复点击，以免造成数据错误...');
+            // 写入统计表
+            const statsRecordId = await statsTable.addRecord([await statsCheJianField.createCell(eachStatsUniqueGroup.cheJian), await statsOrderNoField.createCell(eachStatsUniqueGroup.orderNo), await statsDateField.createCell(eachStatsUniqueGroup.dateVal)]);
         }
 
         uiBuilder.hideLoading();
