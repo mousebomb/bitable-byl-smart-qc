@@ -6,9 +6,11 @@ export default class Config {
     //检查记录
     public static FIELD_STATS_DATE: string = "日期";
     public static FIELD_STATS_OrderNo: string = "订单号";
+    public static FIELD_STATS_CheJian: string = "分类车间";
 
     public static FIELD_RECORD_DATE: string = "创建日期";
     public static FIELD_RECORD_OrderRef: string = "订单号";
+    public static FIELD_RECORD_CheJian: string = "车间类别";
     public static FIELD_RECORD_DONE: string = "已自动插入统计";
 
 

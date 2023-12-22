@@ -1,4 +1,4 @@
-import {bitable, IOpenCellValue, UIBuilder} from "@lark-base-open/js-sdk";
+import {bitable, DateFormatter, IOpenCellValue, UIBuilder} from "@lark-base-open/js-sdk";
 import Config from "./Config";
 
 
@@ -15,8 +15,10 @@ export default async function main(uiBuilder: UIBuilder) {
     const statsOrderNoField = await statsTable.getField(Config.FIELD_STATS_OrderNo);
     const statsDateField = await statsTable.getField(Config.FIELD_STATS_DATE);
     const recordDoneField = await recordTable.getField(Config.FIELD_RECORD_DONE);
-    console.log("default/main",recordOrderRefField,recordDateField,statsOrderNoField,statsDateField,recordDoneField);
-    if (!recordOrderRefField || !recordDateField || !statsOrderNoField || !statsDateField || !recordDoneField) {
+    const statsCheJianField = await statsTable.getField(Config.FIELD_STATS_CheJian);
+    const recordCheJianField = await recordTable.getField(Config.FIELD_RECORD_CheJian);
+    console.log("default/main",recordOrderRefField,recordDateField,statsOrderNoField,statsDateField,recordDoneField,statsCheJianField,recordCheJianField);
+    if (!recordOrderRefField || !recordDateField || !statsOrderNoField || !statsDateField || !recordDoneField || !statsCheJianField || !recordCheJianField) {
         uiBuilder.message.error(`检测不到字段,请检查字段名是否正确`);
         return;
     }
@@ -35,10 +37,10 @@ export default async function main(uiBuilder: UIBuilder) {
 
         //获取表格数据
         const recordRecordIds = await recordTable.getRecordIdList();
-        // 先分析，找出各种组合的 不重复的 orderNo 和 date组合联合唯一，且isDone为false
+        // 先分析，找出各种组合的 不重复的  cheJian , orderNo 和 date组合联合唯一，且isDone为false
         let statsOrderNos = new Set<string>();
         let statsDates = new Set<IOpenCellValue>();
-
+        let statsCheJians = new Set<string>();
 
         // 遍历所有记录
         for (let recordId of recordRecordIds) {
@@ -55,6 +57,7 @@ export default async function main(uiBuilder: UIBuilder) {
             }
             var orderNoVal=await recordTable.getCellString(recordOrderRefField.id, recordId);
             var dateVal=await recordTable.getCellValue(recordDateField.id, recordId);
+            var cheJianVal=await recordTable.getCellString(recordCheJianField.id, recordId);
 
             if (!orderNoVal || !dateVal) {
                 console.warn("default/flushData", "orderNoVal is null");
@@ -65,11 +68,13 @@ export default async function main(uiBuilder: UIBuilder) {
                 statsOrderNos.add(orderNoVal);
             if (!statsDates.has(dateVal))
                 statsDates.add(dateVal);
+            if (!statsCheJians.has(cheJianVal))
+                statsCheJians.add(cheJianVal);
             //标记已插入
             await recordTable.setCellValue( recordDoneField.id,recordId,true);
 
         }
-        workLog += "已分析出"+statsOrderNos.size+"个订单号，"+statsDates.size+"个日期\n";
+        workLog += "已分析出" + statsCheJians.size+"个车间，" +statsOrderNos.size+"个订单号，"+statsDates.size+"个日期\n";
         // console.log("default/分析完毕",statsOrderNos,statsDates);
 
         //便利所有已统计的表行
@@ -84,12 +89,13 @@ export default async function main(uiBuilder: UIBuilder) {
             //目标已存在则去重
             const orderNoVal = await statsTable.getCellString(statsOrderNoField.id, statsRecordId);
             const dateVal = await statsTable.getCellValue(statsDateField.id, statsRecordId);
-            if (!orderNoVal || !dateVal) {
+            const cheJianVal = await statsTable.getCellString(statsCheJianField.id, statsRecordId);
+            if (!orderNoVal || !dateVal || !cheJianVal) {
                 console.warn("default/flushData", "orderNoVal is null");
                 continue;
             }
             //记录要去重的已存在组合
-            statsAlreadyGroup.add(orderNoVal +"_"+ dateVal);
+            statsAlreadyGroup.add(cheJianVal +"_"+orderNoVal +"_"+ dateVal);
         }
 
         // 写入数据，
@@ -97,28 +103,33 @@ export default async function main(uiBuilder: UIBuilder) {
         let max = statsOrderNos.size * statsDates.size;
         for (let orderNo of statsOrderNos)
         {
-            for (let date of statsDates)
+            for(let cheJian of statsCheJians)
             {
-                done++;
-                // 需要检测统计表里没有这个组合
-                if(statsAlreadyGroup.has(orderNo +"_"+ date))
+                for (let date of statsDates)
                 {
-                    var str = '跳过'+orderNo+date+","+ done + "/" + max;
-                    workLog += str + "\n";
-                    uiBuilder.showLoading(str + '，请不要重复点击，以免造成数据错误...');
-                    continue;
-                }
-
-                var str = '插入'+orderNo+date+","+ done + "/" + max ;
-                workLog += str + "\n";
-                uiBuilder.showLoading(str+ '，请不要重复点击，以免造成数据错误...');
-                // 写入统计表
-                const statsRecordId = await statsTable.addRecord({
-                    fields: {
-                        [statsOrderNoField.id]: orderNo,
-                        [statsDateField.id]: date,
+                    done++;
+                    // 需要检测统计表里没有这个组合
+                    if(statsAlreadyGroup.has(cheJian+"_"+orderNo +"_"+ date))
+                    {
+                        var str = '跳过'+cheJian +"_"+orderNo+"_"+date+","+ done + "/" + max;
+                        workLog += str + "\n";
+                        uiBuilder.showLoading(str + '，请不要重复点击，以免造成数据错误...');
+                        continue;
                     }
-                });
+
+                    var str = '插入'+cheJian +"_"+orderNo+"_"+date+","+ done + "/" + max ;
+                    workLog += str + "\n";
+                    uiBuilder.showLoading(str+ '，请不要重复点击，以免造成数据错误...');
+                    // 写入统计表
+                    const statsRecordId = await statsTable.addRecord([await statsCheJianField.createCell(cheJian), await statsOrderNoField.createCell(orderNo), await statsDateField.createCell(date)]);
+                    // const statsRecordId = await statsTable.addRecord({
+                    //     fields: {
+                    //         [statsCheJianField.id]: cheJian,
+                    //         [statsOrderNoField.id]: orderNo,
+                    //         [statsDateField.id]: date,
+                    //     }
+                    // });
+                }
             }
         }
 
